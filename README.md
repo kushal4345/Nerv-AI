@@ -61,7 +61,9 @@ Each round blends recent conversation history, emotion cues, and relevant retrie
 ### Tech Stack
 
 - Frontend: React + TypeScript + Vite + TailwindCSS
-- AI: Azure OpenAI (chat, whisper), Azure Speech, Hume AI
+- AI / RAG: LangChain, Pinecone (vector DB), OpenAI / Azure OpenAI
+- Speech: Azure Speech (Text-to-Speech), Whisper (transcription)
+- Emotion: Hume AI
 - Auth/Storage: Firebase
 - Server: Express (TypeScript) for question routing
 
