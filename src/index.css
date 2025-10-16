@@ -1,0 +1,62 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-montserrat;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply px-4 py-2 rounded-md transition-colors;
+  }
+
+  .btn-primary {
+    @apply bg-accent text-white hover:bg-accent/90;
+  }
+
+  .btn-secondary {
+    @apply bg-secondary text-white hover:bg-secondary/80;
+  }
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-primary;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-secondary rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-accent/50;
+}
+
+/* Print styles for NERV summary */
+@media print {
+  /* Hide interactive controls */
+  button, a[href] { display: none !important; }
+  .sticky, .fixed { position: static !important; }
+  /* Light background for readability */
+  body { background: #ffffff !important; color: #000000 !important; }
+  /* Remove heavy effects */
+  .bg-gradient-to-r, .bg-gradient-to-br, .backdrop-blur-sm { background: #ffffff !important; filter: none !important; }
+  /* Page break utility */
+  .page-break { page-break-before: always; }
+}
