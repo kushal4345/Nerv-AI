@@ -31,6 +31,12 @@
   <img src="src/utils/Screenshot%20(852).png" alt="NERV Comprehensive Interview Analysis Report" />
 </p>
 
+<p align="center">
+  <img src="src/utils/Screenshot%20(853).png" alt="NERV Suggested Resources and Skill Gaps" />
+</p>
+
+<p align="center"><em>The system highlights your weaker topics and suggests concise, high‑quality resources to close the gap quickly.</em></p>
+
 ---
 
 ### Features
