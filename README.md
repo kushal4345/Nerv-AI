@@ -21,8 +21,15 @@
 
 ---
 
-### Demo (placeholder)
-Add your GIF/screenshot here to showcase the interview flow.
+### Demo
+
+<p align="center">
+  <img src="src/utils/Screenshot%20(851).png" alt="NERV Interview Performance Dashboard" />
+</p>
+
+<p align="center">
+  <img src="src/utils/Screenshot%20(852).png" alt="NERV Comprehensive Interview Analysis Report" />
+</p>
 
 ---
 
@@ -34,6 +41,16 @@ Add your GIF/screenshot here to showcase the interview flow.
 - **Emotion Analytics**: Hume AI face signals visualized per question.
 - **Resume‑Aware**: Fetches skills/projects to tailor questions.
 - **Clean UI**: Responsive, modern interface built with Tailwind.
+
+### Retrieval-Augmented Generation (RAG)
+
+All three rounds use RAG tailored to each round’s objective to select or craft the next best question:
+
+- Technical Round: retrieves DSA problem contexts (arrays, strings, trees, graphs, DP) and varies difficulty based on recent answers and detected confidence.
+- Project/Core Round: retrieves topics from resume-aligned domains (DBMS/OOPS/OS/System Design) and from project descriptions to ask specific, non-repetitive questions.
+- HR Round: retrieves behavioral scenarios (leadership, teamwork, conflict resolution, growth) and adapts question themes to the candidate’s emotional signals.
+
+Each round blends recent conversation history, emotion cues, and relevant retrieved snippets to avoid repetition and keep the interview progressive and contextual.
 
 ### Tech Stack
 
