@@ -5,6 +5,7 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/orato'
 const connectDB = async () => {
   if (mongoose.connections[0].readyState) {
     // If already connected, use the existing connection
+
     console.log('Using existing MongoDB connection');
     return;
   }
