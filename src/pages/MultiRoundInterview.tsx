@@ -6,7 +6,7 @@ import { db } from '../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { 
   Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, 
-  Loader2, ArrowLeft, Clock, Brain, User, Briefcase, Users, X
+  Loader2, ArrowLeft, Clock, Brain, User, Briefcase, Users, X, Shield
 } from 'lucide-react';
 import { FaVideo } from 'react-icons/fa';
 import ReactMarkdown from 'react-markdown';
@@ -18,6 +18,11 @@ import { humeAI, UserExpression } from '../services/humeAIService';
 import { openAI, QuestionContext } from '../services/openAIService';
 import { resumeService, ResumeData } from '../services/resumeService';
 import { getResumeData } from '../services/firebaseResumeService';
+import { screenLockService } from '../services/screenLockService';
+
+// Components
+import ScreenLockPermission from '../components/ScreenLockPermission';
+import SecurityStatus from '../components/SecurityStatus';
 
 // Types
 interface Message {
@@ -71,6 +76,12 @@ const MultiRoundInterview: React.FC = () => {
   const [roundIndex, setRoundIndex] = useState(0);
   const [isBreak, setIsBreak] = useState(false);
   const [breakTimeRemaining, setBreakTimeRemaining] = useState(20);
+
+  // Screen lock state
+  const [showScreenLockPermission, setShowScreenLockPermission] = useState(false);
+  const [isScreenLockActive, setIsScreenLockActive] = useState(false);
+  const [screenLockGranted, setScreenLockGranted] = useState(false);
+  const [violationCount, setViolationCount] = useState(0);
 
   // Time management
   const [totalDuration, setTotalDuration] = useState(3); // minutes (3 rounds of 1 minute each)
@@ -205,16 +216,99 @@ const MultiRoundInterview: React.FC = () => {
 
   // Start interview
   const startInterview = () => {
-    // Navigate to technical round with data
+    console.log('Start interview clicked');
+    console.log('showScreenLockPermission before:', showScreenLockPermission);
+    
+    // Show screen lock permission modal
+    setShowScreenLockPermission(true);
+    
+    console.log('showScreenLockPermission after:', true);
+    
+    // Force a simple alert for now to test
+    const userChoice = confirm('Do you want to activate screen lock security? (OK = Yes, Cancel = Skip)');
+    if (userChoice) {
+      console.log('User chose to activate screen lock');
+      handleScreenLockGranted();
+    } else {
+      console.log('User chose to skip screen lock');
+      handleScreenLockDenied();
+    }
+  };
+
+  // Handle screen lock permission granted
+  const handleScreenLockGranted = async () => {
+    console.log('Screen lock permission granted, activating security...');
+    setScreenLockGranted(true);
+    setIsScreenLockActive(true);
+    setShowScreenLockPermission(false);
+    
+    try {
+      // Reset violations for new interview
+      screenLockService.resetViolations();
+      
+      // Actually activate screen lock
+      const success = await screenLockService.requestScreenLock();
+      console.log('Screen lock activation result:', success);
+      
+      if (success) {
+        console.log('Screen lock activated successfully!');
+        alert('🔒 Screen lock activated! Security features are now active.');
+      } else {
+        console.log('Screen lock failed, but continuing...');
+        alert('⚠️ Screen lock failed, but continuing with basic security.');
+      }
+      
+      // Navigate to technical round with data
+      navigate('/technical-round', { 
+        state: { 
+          roundDuration,
+          resumeData,
+          messages: [],
+          questionExpressions: new Map(),
+          screenLockActive: true
+        } 
+      });
+    } catch (error) {
+      console.error('Error activating screen lock:', error);
+      alert('Error activating screen lock, but continuing...');
+      
+      // Still navigate even if screen lock fails
+      navigate('/technical-round', { 
+        state: { 
+          roundDuration,
+          resumeData,
+          messages: [],
+          questionExpressions: new Map(),
+          screenLockActive: false
+        } 
+      });
+    }
+  };
+
+  // Handle screen lock permission denied
+  const handleScreenLockDenied = () => {
+    setScreenLockGranted(false);
+    setIsScreenLockActive(false);
+    setShowScreenLockPermission(false);
+    
+    // Navigate to technical round without screen lock
     navigate('/technical-round', { 
       state: { 
         roundDuration,
         resumeData,
         messages: [],
-        questionExpressions: new Map()
+        questionExpressions: new Map(),
+        screenLockActive: false
       } 
     });
   };
+
+  // Handle violation warning
+  const handleViolationWarning = (count: number) => {
+    setViolationCount(count);
+    console.warn(`Security violation warning: ${count} violations detected`);
+  };
+
 
   // Start current round
   const startCurrentRound = async () => {
@@ -752,9 +846,11 @@ ${Array.from(questionExpressions.entries()).map(([qId, expr]) =>
 
               <button
                 onClick={startInterview}
-                className="w-full py-3 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium"
+                disabled={isLoading}
+                className="w-full py-3 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors font-medium flex items-center justify-center space-x-2 disabled:bg-gray-400 disabled:cursor-not-allowed"
               >
-                Start Multi-Round Interview
+                <Shield className="h-5 w-5" />
+                <span>{isLoading ? 'Starting...' : 'Start Multi-Round Interview'}</span>
               </button>
             </div>
           </div>
@@ -786,10 +882,35 @@ ${Array.from(questionExpressions.entries()).map(([qId, expr]) =>
       <div className="min-h-screen bg-primary flex items-center justify-center">
         <div className="text-center">
           <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-8">
-            <h2 className="text-2xl font-bold mb-4">Interview Complete!</h2>
-            <p className="text-gray-400 mb-6">Thank you for participating in the multi-round interview.</p>
+            {isInterviewTerminated ? (
+              <>
+                <div className="text-red-400 mb-4">
+                  <Shield className="h-16 w-16 mx-auto mb-4" />
+                </div>
+                <h2 className="text-2xl font-bold mb-4 text-red-400">Interview Terminated</h2>
+                <p className="text-gray-400 mb-6">
+                  The interview has been terminated due to multiple security violations detected.
+                </p>
+                <div className="bg-red-900/20 border border-red-500/30 rounded-lg p-4 mb-6">
+                  <p className="text-red-300 text-sm">
+                    Security violations detected: {violationCount}
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-2xl font-bold mb-4">Interview Complete!</h2>
+                <p className="text-gray-400 mb-6">Thank you for participating in the multi-round interview.</p>
+              </>
+            )}
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={() => {
+                // Release screen lock if active
+                if (isScreenLockActive) {
+                  screenLockService.releaseScreenLock();
+                }
+                navigate('/dashboard');
+              }}
               className="px-6 py-3 bg-white text-black rounded-lg hover:bg-gray-200 transition-colors"
             >
               Back to Dashboard
@@ -802,6 +923,128 @@ ${Array.from(questionExpressions.entries()).map(([qId, expr]) =>
 
   return (
     <div className="min-h-screen bg-primary text-white">
+      {/* Screen Lock Permission Modal */}
+      {showScreenLockPermission && (
+        <div
+          ref={(el) => {
+            if (el) {
+              console.log('Modal div is rendered and visible:', el);
+              console.log('Modal computed styles:', window.getComputedStyle(el));
+            }
+          }} 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(255, 0, 0, 0.9)', // Red background to make it obvious
+            zIndex: 99999, // Even higher z-index
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px',
+            width: '100vw',
+            height: '100vh'
+          }}
+          onClick={(e) => {
+            console.log('Modal background clicked');
+            e.stopPropagation();
+          }}
+        >
+          <div 
+            style={{
+              backgroundColor: '#1f2937',
+              border: '1px solid #374151',
+              borderRadius: '16px',
+              padding: '32px',
+              maxWidth: '600px',
+              width: '100%',
+              color: 'white'
+            }}
+          >
+            <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+              <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
+              <h1 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>
+                Interview Security Setup
+              </h1>
+              <p style={{ color: '#d1d5db', fontSize: '16px' }}>
+                To ensure a fair and secure interview experience, we need to activate screen lock mode.
+              </p>
+            </div>
+
+            <div style={{ backgroundColor: '#374151', padding: '16px', borderRadius: '8px', marginBottom: '24px' }}>
+              <h2 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '12px' }}>Security Features:</h2>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                <li style={{ marginBottom: '8px', fontSize: '14px' }}>✅ Fullscreen mode activation</li>
+                <li style={{ marginBottom: '8px', fontSize: '14px' }}>✅ Tab switching detection</li>
+                <li style={{ marginBottom: '8px', fontSize: '14px' }}>✅ Copy/paste blocking</li>
+                <li style={{ marginBottom: '8px', fontSize: '14px' }}>✅ Right-click blocking</li>
+                <li style={{ marginBottom: '8px', fontSize: '14px' }}>✅ Keyboard shortcut blocking</li>
+                <li style={{ fontSize: '14px' }}>✅ Real-time violation monitoring</li>
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+              <button
+                onClick={() => {
+                  console.log('Activate Screen Lock clicked');
+                  handleScreenLockGranted();
+                }}
+                style={{
+                  backgroundColor: '#2563eb',
+                  color: 'white',
+                  border: 'none',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                🔒 Activate Screen Lock
+              </button>
+              
+              <button
+                onClick={() => {
+                  console.log('Skip Security clicked');
+                  handleScreenLockDenied();
+                }}
+                style={{
+                  backgroundColor: '#6b7280',
+                  color: 'white',
+                  border: 'none',
+                  padding: '12px 24px',
+                  borderRadius: '8px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}
+              >
+                Skip Security
+              </button>
+            </div>
+
+            <p style={{ textAlign: 'center', fontSize: '12px', color: '#9ca3af', marginTop: '16px' }}>
+              By proceeding, you agree to the interview security measures.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Original Screen Lock Permission Modal (commented out for now) */}
+      {/* <ScreenLockPermission
+        isVisible={showScreenLockPermission}
+        onPermissionGranted={handleScreenLockGranted}
+        onPermissionDenied={handleScreenLockDenied}
+      /> */}
+
+      {/* Security Status Component */}
+      <SecurityStatus
+        isVisible={isScreenLockActive}
+        onViolationWarning={handleViolationWarning}
+      />
+
       {/* Header */}
       <div className="bg-black/20 backdrop-blur-sm border-b border-white/10 p-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
@@ -1107,7 +1350,9 @@ ${Array.from(questionExpressions.entries()).map(([qId, expr]) =>
                     messages, 
                     questionExpressions, 
                     resumeData,
-                    roundDuration 
+                    roundDuration,
+                    violationCount: screenLockService.getViolationCount(),
+                    violations: screenLockService.getAllViolations()
                   } 
                 })}
                   className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"

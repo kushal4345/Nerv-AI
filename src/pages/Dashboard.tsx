@@ -9,6 +9,7 @@ import { collection, getDocs, query, where, setDoc, Timestamp } from 'firebase/f
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { extractTextFromPDF } from '../services/pdfService';
 import { extractAndSaveResume } from '../services/resumeService';
+import { getInterviewHistory, getInterviewById, deleteInterviewById } from '../services/historyService';
 
 // Add proper type for user details
 type UserDetails = {
@@ -124,15 +125,30 @@ const Dashboard = () => {
     
     fetchUserDetails();
     
-    // Load interview history from localStorage
-    const storedHistory = localStorage.getItem('interviewHistory');
-    if (storedHistory) {
+    // Load interview history (prefer Firebase, fallback to localStorage)
+    const loadHistory = async () => {
       try {
-        setInterviewHistory(JSON.parse(storedHistory));
+        if (currentUser) {
+          const remote = await getInterviewHistory(currentUser.uid);
+          if (Array.isArray(remote) && remote.length > 0) {
+            setInterviewHistory(remote);
+            return;
+          }
+        }
+        // Fallback to local
+        const storedHistory = localStorage.getItem('interviewHistory');
+        if (storedHistory) {
+          setInterviewHistory(JSON.parse(storedHistory));
+        }
       } catch (e) {
-        console.error('Error parsing interview history:', e);
+        console.error('Failed to load interview history, using local fallback:', e);
+        const storedHistory = localStorage.getItem('interviewHistory');
+        if (storedHistory) {
+          try { setInterviewHistory(JSON.parse(storedHistory)); } catch {}
+        }
       }
-    }
+    };
+    loadHistory();
     
     // Load latest improvement plan from localStorage
     const storedPlan = localStorage.getItem('latestImprovementPlan');
@@ -415,21 +431,47 @@ const Dashboard = () => {
 
   // Add function to view interview results
   const viewInterviewResults = (interviewId: string) => {
-    // Store the selected interview in localStorage
-    const selectedInterview = interviewHistory.find(interview => interview.id === interviewId);
-    if (selectedInterview) {
-      localStorage.setItem('interviewResults', JSON.stringify(selectedInterview));
-      navigate('/results');
-    }
+    const openLocal = () => {
+      const selectedInterview = interviewHistory.find(interview => interview.id === interviewId);
+      if (selectedInterview) {
+        localStorage.setItem('interviewResults', JSON.stringify(selectedInterview));
+        navigate('/results');
+      }
+    };
+    (async () => {
+      try {
+        if (currentUser) {
+          const remote = await getInterviewById(currentUser.uid, interviewId);
+          if (remote) {
+            localStorage.setItem('interviewResults', JSON.stringify(remote));
+            navigate('/results');
+            return;
+          }
+        }
+        openLocal();
+      } catch (e) {
+        console.warn('Unable to fetch remote interview, opening local copy:', e);
+        openLocal();
+      }
+    })();
   };
   
   // Add function to delete interview from history
   const deleteInterview = (interviewId: string, event: React.MouseEvent) => {
     event.stopPropagation(); // Prevent triggering the parent click
-    
-    const updatedHistory = interviewHistory.filter(interview => interview.id !== interviewId);
-    setInterviewHistory(updatedHistory);
-    localStorage.setItem('interviewHistory', JSON.stringify(updatedHistory));
+    (async () => {
+      try {
+        if (currentUser) {
+          await deleteInterviewById(currentUser.uid, interviewId);
+        }
+      } catch (e) {
+        console.warn('Failed to delete interview remotely, removing locally:', e);
+      } finally {
+        const updatedHistory = interviewHistory.filter(interview => interview.id !== interviewId);
+        setInterviewHistory(updatedHistory);
+        localStorage.setItem('interviewHistory', JSON.stringify(updatedHistory));
+      }
+    })();
   };
   
   // Calculate pagination
@@ -521,6 +563,8 @@ const Dashboard = () => {
                             name="displayName"
                             value={editForm.displayName}
                             onChange={handleInputChange}
+                            placeholder="Your full name"
+                            aria-label="Full Name"
                             className="w-full px-3 py-2 bg-black/50 border border-white/20 rounded-lg focus:ring-1 focus:ring-white focus:border-white/50 focus:outline-none transition-colors"
                           />
                         </div>

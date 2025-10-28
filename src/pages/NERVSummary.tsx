@@ -3,6 +3,9 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, Brain, BarChart3, MessageSquare, Eye, User, TrendingUp, Clock, Star, Target, Award, Download, Share2, Activity, Lightbulb, AlertCircle, CheckCircle2, BarChart, ExternalLink } from 'lucide-react';
 import { youtubeService, type YouTubeResource } from '../services/youtubeService';
 import ReactMarkdown from 'react-markdown';
+import { useAuth } from '../contexts/AuthContext';
+import { saveInterviewResult } from '../services/historyService';
+import { screenLockService } from '../services/screenLockService';
 
 interface Message {
   id: string;
@@ -39,12 +42,15 @@ interface RoundData {
 const NERVSummary: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { currentUser } = useAuth();
   
   const [roundsData, setRoundsData] = useState<RoundData[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
   const [generatedSummary, setGeneratedSummary] = useState('');
+  const [violationCount, setViolationCount] = useState(0);
+  const [violations, setViolations] = useState<any[]>([]);
   const [atsScore, setAtsScore] = useState(0);
   const [skillGaps, setSkillGaps] = useState<string[]>([]);
   const [skillGapAnalysis, setSkillGapAnalysis] = useState<any>(null);
@@ -54,6 +60,7 @@ const NERVSummary: React.FC = () => {
   const [learningResources, setLearningResources] = useState<YouTubeResource[]>([]);
   const [isFetchingResources, setIsFetchingResources] = useState(false);
   const printableRef = useRef<HTMLDivElement>(null);
+  const hasSavedHistoryRef = useRef<boolean>(false);
 
   const handleDownloadPDF = async () => {
     try {
@@ -103,6 +110,22 @@ const NERVSummary: React.FC = () => {
   // Check if data was passed from interview rounds
   const passedData = location.state as any;
   console.log('NERVSummary received data from location.state:', passedData);
+
+  // Get violation data and deactivate screen lock
+  useEffect(() => {
+    // Get violation count and details from passed data or service
+    const count = passedData?.violationCount ?? screenLockService.getViolationCount();
+    const allViolations = passedData?.violations ?? screenLockService.getAllViolations();
+    
+    setViolationCount(count);
+    setViolations(allViolations);
+    
+    console.log('Violation count:', count);
+    console.log('All violations:', allViolations);
+    
+    // Deactivate screen lock since interview is complete
+    screenLockService.deactivate();
+  }, [passedData]);
 
   // Fetch data from all three rounds
   useEffect(() => {
@@ -492,6 +515,63 @@ const NERVSummary: React.FC = () => {
 
     fetchAllRoundsData();
   }, []);
+
+  // Persist interview summary into history for future viewing
+  useEffect(() => {
+    try {
+      // Require either a generated summary or a passed summary and some processed data
+      const summaryText = generatedSummary || (passedData && passedData.summary) || '';
+      if (!summaryText) return;
+      if (hasSavedHistoryRef.current) return;
+
+      // Build a compact, Results-compatible entry
+      const emotionsData = roundsData.flatMap((round) =>
+        (round.emotions || []).map((q) => ({
+          question: q.question || 'Question not recorded',
+          answer: q.answer || 'Answer not recorded',
+          emotions: Array.isArray(q.emotions) ? q.emotions : [],
+          timestamp: q.timestamp || new Date().toISOString(),
+          responseTime: q.responseTime || 0,
+          isFollowUp: false
+        }))
+      );
+
+      const transcriptions = roundsData
+        .flatMap((round) => (round.messages || []))
+        .filter((m) => m.sender === 'user' && typeof m.text === 'string')
+        .map((m) => m.text);
+
+      const entry = {
+        id: Date.now().toString(),
+        summary: summaryText,
+        emotionsData,
+        transcriptions,
+        timestamp: new Date().toISOString()
+      } as any;
+
+      // Save to Firebase if available, then keep local fallbacks in any case
+      (async () => {
+        try {
+          if (currentUser && currentUser.uid) {
+            const { id, ...payload } = entry;
+            const savedId = await saveInterviewResult(currentUser.uid, payload);
+            entry.id = savedId;
+          }
+        } catch (e) {
+          console.warn('Firebase save failed, continuing with local history only:', e);
+        } finally {
+          localStorage.setItem('interviewResults', JSON.stringify(entry));
+          const historyRaw = localStorage.getItem('interviewHistory');
+          const history = historyRaw ? JSON.parse(historyRaw) : [];
+          history.push(entry);
+          localStorage.setItem('interviewHistory', JSON.stringify(history));
+          hasSavedHistoryRef.current = true;
+        }
+      })();
+    } catch (e) {
+      console.error('Failed to persist interview summary to history:', e);
+    }
+  }, [generatedSummary, roundsData]);
 
 
 
@@ -933,7 +1013,7 @@ const NERVSummary: React.FC = () => {
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                       <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50 hover:border-blue-500/50 transition-all duration-300 group">
                         <div className="flex items-center justify-between mb-4">
                           <div className="p-3 bg-blue-500/20 rounded-lg group-hover:bg-blue-500/30 transition-colors">
@@ -995,6 +1075,22 @@ const NERVSummary: React.FC = () => {
                         <div className="flex items-center text-sm text-gray-400">
                           <Star className="w-4 h-4 mr-1" />
                           <span>Resume quality</span>
+                        </div>
+                      </div>
+                      
+                      <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50 hover:border-red-500/50 transition-all duration-300 group">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="p-3 bg-red-500/20 rounded-lg group-hover:bg-red-500/30 transition-colors">
+                            <AlertCircle className="w-6 h-6 text-red-400" />
+                          </div>
+                          <div className="text-right">
+                            <p className="text-3xl font-bold text-white">{violationCount}</p>
+                            <p className="text-sm text-gray-400">Violations</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center text-sm text-gray-400">
+                          <Activity className="w-4 h-4 mr-1" />
+                          <span>Security breaches</span>
                         </div>
                       </div>
                     </div>
@@ -1092,6 +1188,55 @@ const NERVSummary: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Security Violations Section */}
+                {violationCount > 0 && (
+                  <div className="bg-gray-800/50 backdrop-blur-sm rounded-xl p-6 border border-gray-700/50">
+                    <div className="flex items-center justify-between mb-6">
+                      <h3 className="text-xl font-semibold flex items-center">
+                        <AlertCircle className="w-5 h-5 mr-2 text-red-400" />
+                        Security Violations
+                      </h3>
+                      <div className="text-sm text-gray-400">
+                        {violationCount} violations detected
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {violations.map((violation, index) => (
+                        <div key={index} className="flex items-center justify-between p-3 bg-red-900/20 rounded-lg border border-red-500/30">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                            <div>
+                              <p className="font-medium text-red-400 capitalize">
+                                {violation.type.replace('_', ' ')}
+                              </p>
+                              <p className="text-sm text-gray-400">
+                                {violation.timestamp.toLocaleTimeString()}
+                              </p>
+                            </div>
+                          </div>
+                          {violation.details && (
+                            <div className="text-sm text-gray-500">
+                              {violation.details}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                    
+                    <div className="mt-4 p-4 bg-yellow-900/20 rounded-lg border border-yellow-500/30">
+                      <div className="flex items-center space-x-2">
+                        <AlertCircle className="w-5 h-5 text-yellow-400" />
+                        <p className="text-yellow-400 font-medium">Security Notice</p>
+                      </div>
+                      <p className="text-gray-300 text-sm mt-2">
+                        These violations were detected during the interview. While they don't affect your performance score, 
+                        maintaining focus during interviews is important for professional settings.
+                      </p>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>

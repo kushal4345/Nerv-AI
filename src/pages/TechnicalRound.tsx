@@ -6,7 +6,7 @@ import { db } from '../lib/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { 
   Mic, MicOff, Camera, CameraOff, Volume2, VolumeX, 
-  Loader2, ArrowLeft, Clock, Brain, X
+  Loader2, ArrowLeft, Clock, Brain, X, Shield
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
@@ -18,6 +18,10 @@ import { apiService } from '../services/apiService';
 import { openAI, QuestionContext } from '../services/openAIService';
 import { resumeService } from '../services/resumeService';
 import { getResumeData } from '../services/firebaseResumeService';
+import { screenLockService } from '../services/screenLockService';
+
+// Components
+import SecurityStatus from '../components/SecurityStatus';
 
 interface Message {
   id: string;
@@ -50,6 +54,7 @@ const TechnicalRound: React.FC = () => {
   
   // Get round duration from location state
   const roundDuration = location.state?.roundDuration || 3;
+  const screenLockActive = location.state?.screenLockActive || false;
   
   // Debug logging
   console.log('TechnicalRound component rendered');
@@ -905,6 +910,12 @@ const TechnicalRound: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-primary text-white">
+      {/* Security Status Component */}
+      <SecurityStatus
+        isVisible={screenLockActive}
+        onViolationWarning={(count) => console.warn(`Security violation: ${count}`)}
+      />
+
       {/* Header */}
       <div className="bg-black/20 backdrop-blur-sm border-b border-white/10 p-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
